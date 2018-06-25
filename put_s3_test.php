@@ -15,6 +15,36 @@ $endpoint_url = "https://s3-" . S3_REGION . ".amazonaws.com/" . S3_BUCKET . "/in
 // instantiate a curl resource
 $curl = curl_init(); 
 
+// dependencies for signature
+$dateString = $dateString = date('Ymd');
+$credential = implode("/", array(S3_KEY, $dateString, S3_REGION, 's3/aws4_request'));
+$xAmzDate = $dateString . 'T000000Z';
+
+
+$policy = base64_encode(json_encode(array(
+  // ISO 8601 - date('c'); generates uncompatible date, so better do it manually.
+  'expiration' => date('Y-m-d\TH:i:s.000\Z', strtotime('+5 minutes')), // 5 minutes into the future.
+  'conditions' => array(
+	array('PUT' => ''),
+	array('Content-Type' => 'text/html'),
+	array('Content-Length' => filesize('index.html')),
+	array('Content-MD5' => base64_encode(md5_file('index.html'))),
+	array('x-amz-acl' => 'public-read'),
+	array('x-amz-date' => $xAmzDate),
+	array('x-amz-content-sha256' => 'UNSIGNED-PAYLOAD'),
+	array('Host:' => S3_BUCKET . '.s3.amazonaws.com'),
+	array('x-amz-algorithm' => 'AWS4-HMAC-SHA256'),
+	array('x-amz-credential' => $credential),
+  )
+)));
+
+// Generate signature
+$dateKey = hash_hmac('sha256', $dateString, 'AWS4' . S3_SECRET, true);
+$dateRegionKey = hash_hmac('sha256', S3_REGION, $dateKey, true);
+$dateRegionServiceKey = hash_hmac('sha256', 's3', $dateRegionKey, true);
+$signingKey = hash_hmac('sha256', 'aws4_request', $dateRegionServiceKey, true);
+$signature = hash_hmac('sha256', $policy, $signingKey, false);
+
 
 // set our cURL options
 curl_setopt_array($curl, array(
@@ -38,7 +68,8 @@ curl_setopt_array($curl, array(
 		'x-amz-date: ' . gmdate('D, d M Y H:i:s T'),
 		'x-amz-content-sha256: UNSIGNED-PAYLOAD',
 		'Host:' . S3_BUCKET . '.s3.amazonaws.com',
-		'Authorization: AWS4-HMAC-SHA256 Credential=' . S3_KEY . '/20180625/' . S3_REGION . '/s3/aws4_request,SignedHeaders=host;x-amz-date;x-amz-acl;content-md5,Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024'
+		'x-amz-algorithm:' . 'AWS4-HMAC-SHA256',
+		'Authorization: AWS4-HMAC-SHA256 Credential=' . S3_KEY . '/20180625/' . S3_REGION . '/s3/aws4_request,SignedHeaders=host;x-amz-date;x-amz-acl;content-md5;x-amz-algorithm,Signature=' . $signature
 	)
 ));
 
