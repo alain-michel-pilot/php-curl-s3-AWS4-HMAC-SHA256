@@ -23,9 +23,9 @@ curl_setopt_array($curl, array(
 	CURLOPT_USERAGENT => 'leonstafford/wordpress-static-html-plugin',
 	CURLOPT_URL => $endpoint_url,
 	CURLOPT_HEADER => true,// get header back in response
-	CURLOPT_RETURNTRANSFER => false,
+	CURLOPT_RETURNTRANSFER => true,
 	CURLOPT_FOLLOWLOCATION => false,
-	CURLOPT_CUSTOMREQUEST => "PUT",
+//	CURLOPT_CUSTOMREQUEST => "PUT",
 	CURLOPT_VERBOSE => true,
 	CURLOPT_STDERR =>  fopen('php://stderr', 'w'),
 	CURLOPT_HTTPHEADER => array(
