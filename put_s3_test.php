@@ -35,10 +35,10 @@ curl_setopt_array($curl, array(
 		'Content-Length: ' . filesize('index.html'),
 		'Content-MD5: ' . base64_encode(md5_file('index.html')),
 		'x-amz-acl: public-read',
-		'x-amz-date: 20180625',
+		'x-amz-date: ' . gmdate('D, d M Y H:i:s T'),
+		'x-amz-content-sha256: UNSIGNED-PAYLOAD',
 		'Host:' . S3_BUCKET . '.s3.amazonaws.com',
-		'Date: 20180625',
-		'Authorization: AWS4-HMAC-SHA256 Credential=' . S3_KEY . '/20180625/' . S3_REGION . '/s3/aws4_request,SignedHeaders=host;x-amz-date,Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024'
+		'Authorization: AWS4-HMAC-SHA256 Credential=' . S3_KEY . '/20180625/' . S3_REGION . '/s3/aws4_request,SignedHeaders=host;x-amz-date;x-amz-acl;content-md5,Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024'
 	)
 ));
 
