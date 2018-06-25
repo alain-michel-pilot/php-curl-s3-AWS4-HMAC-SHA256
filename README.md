@@ -26,4 +26,4 @@ SignedHeaders=host;range;x-amz-date,
 Signature=fe5f80f77d5fa3beca038a248ff027d0445342fe2855ddc963176630326f1024
 ```
 
-
+Complete S3 objectPut reference: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTObjectPUT.html
