@@ -6,80 +6,143 @@ define('S3_SECRET', getenv('S3_SECRET'));
 define('S3_REGION', getenv('S3_REGION'));
 define('S3_BUCKET', getenv('S3_BUCKET'));
 
+if ( empty( S3_KEY ) ) {
+    throw new Exception('No S3_KEY defined');
+}
 
+if ( empty( S3_SECRET ) ) {
+    throw new Exception('No S3_SECRET defined');
+}
 
-// set the curl endpoint we will hit at AWS
-//$endpoint_url = "http://s3-" . S3_REGION . ".amazonaws.com/" . S3_BUCKET . "/index.html";
-$endpoint_url = "https://s3-" . S3_REGION . ".amazonaws.com/" . S3_BUCKET . "/index.html";
+if ( empty( S3_REGION ) ) {
+    throw new Exception('No S3_REGION defined');
+}
 
-// instantiate a curl resource
-$curl = curl_init(); 
+if ( empty( S3_BUCKET ) ) {
+    throw new Exception('No S3_BUCKET defined');
+}
 
-// dependencies for signature
-$dateString = $dateString = date('Ymd');
-$credential = implode("/", array(S3_KEY, $dateString, S3_REGION, 's3/aws4_request'));
-$xAmzDate = $dateString . 'T000000Z';
+/// AWS API keys
+$aws_access_key_id = S3_KEY;
+$aws_secret_access_key = S3_SECRET;
 
+// Bucket
+$bucket_name = S3_BUCKET;
 
-$policy = base64_encode(json_encode(array(
-  // ISO 8601 - date('c'); generates uncompatible date, so better do it manually.
-  'expiration' => date('Y-m-d\TH:i:s.000\Z', strtotime('+5 minutes')), // 5 minutes into the future.
-  'conditions' => array(
-	array('PUT' => ''),
-	array('Content-Type' => 'text/html'),
-	array('Content-Length' => filesize('index.html')),
-	array('Content-MD5' => base64_encode(md5_file('index.html'))),
-	array('x-amz-acl' => 'public-read'),
-	array('x-amz-date' => $xAmzDate),
-	array('x-amz-content-sha256' => 'UNSIGNED-PAYLOAD'),
-	array('Host:' => S3_BUCKET . '.s3.amazonaws.com'),
-	array('x-amz-algorithm' => 'AWS4-HMAC-SHA256'),
-	array('x-amz-credential' => $credential),
-  )
-)));
+// AWS region and Host Name (Host names are different for each AWS region)
+// As an example these are set to us-east-1 (US Standard)
+$aws_region = S3_REGION;
+$host_name = $bucket_name . '.s3.amazonaws.com';
 
-// Generate signature
-$dateKey = hash_hmac('sha256', $dateString, 'AWS4' . S3_SECRET, true);
-$dateRegionKey = hash_hmac('sha256', S3_REGION, $dateKey, true);
-$dateRegionServiceKey = hash_hmac('sha256', 's3', $dateRegionKey, true);
-$signingKey = hash_hmac('sha256', 'aws4_request', $dateRegionServiceKey, true);
-$signature = hash_hmac('sha256', $policy, $signingKey, false);
+// Server path where content is present. This is just an example
+$content_path = 'index.html';
+$content = file_get_contents($content_path);
 
+// AWS file permissions
+$content_acl = 'authenticated-read';
 
-// set our cURL options
-curl_setopt_array($curl, array(
-	CURLOPT_CONNECTTIMEOUT => 30,
-	CURLOPT_LOW_SPEED_LIMIT => 1,
-	CURLOPT_LOW_SPEED_TIME => 30,
-	CURLOPT_USERAGENT => 'leonstafford/wordpress-static-html-plugin',
-	CURLOPT_URL => $endpoint_url,
-	CURLOPT_HEADER => true,// get header back in response
-	CURLOPT_RETURNTRANSFER => true,
-	CURLOPT_FOLLOWLOCATION => false,
-//	CURLOPT_CUSTOMREQUEST => "PUT",
-	CURLOPT_VERBOSE => true,
-	CURLOPT_STDERR =>  fopen('php://stderr', 'w'),
-	CURLOPT_HTTPHEADER => array(
-		'PUT',
-		'Content-Type: text/html',
-		'Content-Length: ' . filesize('index.html'),
-		'Content-MD5: ' . base64_encode(md5_file('index.html')),
-		'x-amz-acl: public-read',
-		'x-amz-date: ' . gmdate('D, d M Y H:i:s T'),
-		'x-amz-content-sha256: UNSIGNED-PAYLOAD',
-		'Host:' . S3_BUCKET . '.s3.amazonaws.com',
-		'x-amz-algorithm:' . 'AWS4-HMAC-SHA256',
-		'Authorization: AWS4-HMAC-SHA256 Credential=' . S3_KEY . '/20180625/' . S3_REGION . '/s3/aws4_request,SignedHeaders=host;x-amz-date;x-amz-acl;content-md5;x-amz-algorithm,Signature=' . $signature
-	)
-));
+// MIME type of file. Very important to set if you later plan to load the file from a S3 url in the browser (images, for example)
+$content_type = 'text/html';
+// Name of content on S3
+$content_title = 'curledindex.html';
 
+// Service name for S3
+$aws_service_name = 's3';
 
+// UTC timestamp and date
+$timestamp = gmdate('Ymd\THis\Z');
+$date = gmdate('Ymd');
 
-// show the curl info before making the request
+// HTTP request headers as key & value
+$request_headers = array();
+$request_headers['Content-Type'] = $content_type;
+$request_headers['Date'] = $timestamp;
+$request_headers['Host'] = $host_name;
+$request_headers['x-amz-acl'] = $content_acl;
+$request_headers['x-amz-content-sha256'] = hash('sha256', $content);
+// Sort it in ascending order
+ksort($request_headers);
 
-$output = curl_exec($curl); 
+// Canonical headers
+$canonical_headers = [];
+foreach($request_headers as $key => $value) {
+    $canonical_headers[] = strtolower($key) . ":" . $value;
+}
+$canonical_headers = implode("\n", $canonical_headers);
+
+// Signed headers
+$signed_headers = [];
+foreach($request_headers as $key => $value) {
+    $signed_headers[] = strtolower($key);
+}
+$signed_headers = implode(";", $signed_headers);
+
+// Cannonical request 
+$canonical_request = [];
+$canonical_request[] = "PUT";
+$canonical_request[] = "/" . $content_title;
+$canonical_request[] = "";
+$canonical_request[] = $canonical_headers;
+$canonical_request[] = "";
+$canonical_request[] = $signed_headers;
+$canonical_request[] = hash('sha256', $content);
+$canonical_request = implode("\n", $canonical_request);
+$hashed_canonical_request = hash('sha256', $canonical_request);
+
+// AWS Scope
+$scope = [];
+$scope[] = $date;
+$scope[] = $aws_region;
+$scope[] = $aws_service_name;
+$scope[] = "aws4_request";
+
+// String to sign
+$string_to_sign = [];
+$string_to_sign[] = "AWS4-HMAC-SHA256"; 
+$string_to_sign[] = $timestamp; 
+$string_to_sign[] = implode('/', $scope);
+$string_to_sign[] = $hashed_canonical_request;
+$string_to_sign = implode("\n", $string_to_sign);
+
+// Signing key
+$kSecret = 'AWS4' . $aws_secret_access_key;
+$kDate = hash_hmac('sha256', $date, $kSecret, true);
+$kRegion = hash_hmac('sha256', $aws_region, $kDate, true);
+$kService = hash_hmac('sha256', $aws_service_name, $kRegion, true);
+$kSigning = hash_hmac('sha256', 'aws4_request', $kService, true);
+
+// Signature
+$signature = hash_hmac('sha256', $string_to_sign, $kSigning);
+
+// Authorization
+$authorization = [
+    'Credential=' . $aws_access_key_id . '/' . implode('/', $scope),
+    'SignedHeaders=' . $signed_headers,
+    'Signature=' . $signature
+];
+$authorization = 'AWS4-HMAC-SHA256' . ' ' . implode( ',', $authorization);
+
+// Curl headers
+$curl_headers = [ 'Authorization: ' . $authorization ];
+foreach($request_headers as $key => $value) {
+    $curl_headers[] = $key . ": " . $value;
+}
+
+$url = 'https://' . $host_name . '/' . $content_title;
+$ch = curl_init($url);
+curl_setopt($ch, CURLOPT_HEADER, false);
+curl_setopt($ch, CURLOPT_HTTPHEADER, $curl_headers);
+curl_setopt($ch, CURLOPT_RETURNTRANSFER, false);
+curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, FALSE);
+curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+curl_setopt($ch, CURLOPT_CUSTOMREQUEST, "PUT");
+curl_setopt($ch, CURLOPT_POSTFIELDS, $content);
+$output = curl_exec($ch); 
+$http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+if($http_code != 200) 
+    exit('Error : Failed to upload');
 
 echo print_r($output);
 
-curl_close($curl);
+curl_close($ch);
 
