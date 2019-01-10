@@ -39,7 +39,7 @@ $content_path = 'index.html';
 $content = file_get_contents($content_path);
 
 // AWS file permissions
-$content_acl = 'authenticated-read';
+$content_acl = 'public-read';
 
 // MIME type of file. Very important to set if you later plan to load the file from a S3 url in the browser (images, for example)
 $content_type = 'text/html';
@@ -141,8 +141,5 @@ $output = curl_exec($ch);
 $http_code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
 if($http_code != 200) 
     exit('Error : Failed to upload');
-
-echo print_r($output);
-
 curl_close($ch);
 
